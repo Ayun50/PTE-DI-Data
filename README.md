@@ -41,7 +41,6 @@
 
 如果您想增加或修改数据，请编辑 `script.js` 文件中的 `MASTER_ITEMS` 数组。每个数据对象格式如下：
 
-```javascript
 { display: "25%", spoken: "twenty-five percent" }
 display：页面上显示的内容（可包含逗号、符号等）
 spoken：朗读时的文本（应使用英文单词拼写）
