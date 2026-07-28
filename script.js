@@ -86,7 +86,7 @@ const MASTER_ITEMS = [
     { display: "6.02", spoken: "six point zero two" },
     { display: "9.8", spoken: "nine point eight" },
     { display: "-10.01", spoken: "minus ten point zero one" },
-    { display: "0.99", spoken: "point ninety-nine" },
+    { display: "0.99", spoken: "point nine nine" },
     { display: "100.5", spoken: "one hundred point five" },
 
     // Temperatures
@@ -142,76 +142,210 @@ const MASTER_ITEMS = [
     { display: "45,102", spoken: "forty-five thousand one hundred two" },
     { display: "91,406", spoken: "ninety-one thousand four hundred six" },
     { display: "9.7 billion", spoken: "nine point seven billion" },
-    { display: "3.4 trillion", spoken: "three point four trillion" }
+    { display: "3.4 trillion", spoken: "three point four trillion" },
+
+    // Fractions and mixed numbers
+    { display: "1/2", spoken: "one half" },
+    { display: "1/3", spoken: "one third" },
+    { display: "2/3", spoken: "two thirds" },
+    { display: "1/4", spoken: "one quarter" },
+    { display: "3/4", spoken: "three quarters" },
+    { display: "5/8", spoken: "five eighths" },
+    { display: "1 1/2", spoken: "one and a half" },
+    { display: "2 3/4", spoken: "two and three quarters" },
+
+    // Ratios, proportions and rates
+    { display: "3:1", spoken: "three to one" },
+    { display: "1:4", spoken: "one to four" },
+    { display: "$35 per capita", spoken: "thirty-five dollars per capita" },
+
+    // Clock times and durations
+    { display: "9:30 a.m.", spoken: "nine thirty a m" },
+    { display: "2:45 p.m.", spoken: "two forty-five p m" },
+    { display: "1 hr 45 min", spoken: "one hour forty-five minutes" },
+    { display: "90 min", spoken: "ninety minutes" },
+    { display: "3.5 hours", spoken: "three point five hours" },
+    { display: "45 sec", spoken: "forty-five seconds" },
+
+    // Ranges and intervals
+    { display: "10–15%", spoken: "ten to fifteen percent" },
+    { display: "2.5–3.0%", spoken: "two point five to three point zero percent" },
+    { display: "18–24", spoken: "eighteen to twenty-four" },
+    { display: "$20–$30", spoken: "twenty to thirty dollars" },
+    { display: "-5 to 5", spoken: "minus five to five" },
+
+    // Rankings, multipliers and comparisons
+    { display: "21st", spoken: "twenty-first" },
+    { display: "2×", spoken: "two times" },
+    { display: "1.5 times", spoken: "one point five times" },
+
+    // Measurements and scientific units
+    { display: "5 km", spoken: "five kilometres" },
+    { display: "12.5 km", spoken: "twelve point five kilometres" },
+    { display: "80 km/h", spoken: "eighty kilometres per hour" },
+    { display: "1,250 m", spoken: "one thousand two hundred fifty metres" },
+    { display: "3.2 kg", spoken: "three point two kilograms" },
+    { display: "750 g", spoken: "seven hundred fifty grams" },
+    { display: "2.5 tonnes", spoken: "two point five tonnes" },
+    { display: "1.8 L", spoken: "one point eight litres" },
+    { display: "500 mL", spoken: "five hundred millilitres" },
+    { display: "250 people/km²", spoken: "two hundred fifty people per square kilometre" },
+    { display: "40 kWh", spoken: "forty kilowatt hours" },
+    { display: "120 MW", spoken: "one hundred twenty megawatts" },
+
+    // Angles, coordinates and scientific notation
+    { display: "45°", spoken: "forty-five degrees" },
+    { display: "180°", spoken: "one hundred eighty degrees" },
+    { display: "35°N", spoken: "thirty-five degrees north" },
+    { display: "120°S", spoken: "one hundred twenty degrees south" },
+
+    // Common chart abbreviations and reporting periods
+    { display: "1.2K", spoken: "one point two thousand" },
+    { display: "3.5M", spoken: "three point five million" },
+    { display: "2.1B", spoken: "two point one billion" },
+    { display: "2019/20", spoken: "twenty nineteen to twenty twenty" },
+
+    // Additional currencies and prices
+    { display: "$12.50", spoken: "twelve dollars fifty cents" },
+    { display: "£8.99", spoken: "eight pounds ninety-nine pence" },
+    { display: "€3.5 million", spoken: "three point five million euros" },
+    { display: "¥2,500", spoken: "two thousand five hundred yen" }
 ];
 
-// Shuffle function
+// ==================== SETTINGS ====================
+const ROUND_SIZE = 100;
+
+// Shuffle an array in place.
 function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
+    for (let i = array.length - 1; i > 0; i -= 1) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
 }
 
-// ==================== GLOBAL VARIABLES ====================
-let practiceItems = [];           // current shuffled list of 100
+// ==================== STATE ====================
+let practiceItems = [];
 let currentIndex = 0;
 let timerSeconds = 0;
 let timerInterval = null;
 let timerRunning = false;
+let timerStartedAt = null;
 
-// DOM elements
-const dataFigure = document.getElementById('data-figure');
-const speakBtn = document.getElementById('speak-btn');
-const actionBtn = document.getElementById('action-btn');
-const progressSpan = document.getElementById('progress');
-const timerDisplay = document.getElementById('timer-display');
-const messageDiv = document.getElementById('message');
+// ==================== DOM ELEMENTS ====================
+const dataFigure = document.getElementById("data-figure");
+const speakBtn = document.getElementById("speak-btn");
+const actionBtn = document.getElementById("action-btn");
+const progressSpan = document.getElementById("progress");
+const timerDisplay = document.getElementById("timer-display");
+const messageDiv = document.getElementById("message");
 
-// ==================== INIT ====================
+// ==================== INITIALIZATION ====================
 function initPractice() {
-    // Shuffle master list and take first 100
+    stopSpeech();
+
     const shuffled = shuffleArray([...MASTER_ITEMS]);
-    practiceItems = shuffled.slice(0, 100);
+    const itemCount = Math.min(ROUND_SIZE, shuffled.length);
+
+    practiceItems = shuffled.slice(0, itemCount);
     currentIndex = 0;
+
     resetTimer();
-    startTimer();
-    loadItem(currentIndex);
+    setMessage("");
+    actionBtn.disabled = practiceItems.length === 0;
+    speakBtn.disabled = practiceItems.length === 0;
+
+    if (practiceItems.length === 0) {
+        dataFigure.textContent = "—";
+        progressSpan.textContent = "0/0";
+        setMessage("没有可练习的数据。", "error");
+        return;
+    }
+
+    loadItem(0);
 }
 
 function loadItem(index) {
     const item = practiceItems[index];
+
+    if (!item) {
+        setMessage("无法加载当前数据。", "error");
+        return;
+    }
+
     dataFigure.textContent = item.display;
-    progressSpan.textContent = `${index+1}/${practiceItems.length}`;
-    messageDiv.textContent = ''; // clear any message
-    // Auto-speak the new item
-    speakItem(item.spoken);
+    progressSpan.textContent = `${index + 1}/${practiceItems.length}`;
+    setMessage("");
+
+    // Browsers may block autoplay until the user has interacted with the page.
+    // The speaker button remains available for manual replay.
+    speakItem(item.spoken, false);
 }
 
-function speakItem(text) {
-    window.speechSynthesis.cancel(); // stop any ongoing speech
+// ==================== SPEECH ====================
+function speechIsSupported() {
+    return "speechSynthesis" in window
+        && typeof SpeechSynthesisUtterance !== "undefined";
+}
+
+function stopSpeech() {
+    if (speechIsSupported()) {
+        window.speechSynthesis.cancel();
+    }
+}
+
+function speakItem(text, showUnsupportedMessage = true) {
+    if (!speechIsSupported()) {
+        speakBtn.disabled = true;
+        speakBtn.title = "当前浏览器不支持语音朗读";
+
+        if (showUnsupportedMessage) {
+            setMessage("当前浏览器不支持语音朗读。", "error");
+        }
+        return;
+    }
+
+    window.speechSynthesis.cancel();
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
+    utterance.lang = "en-US";
+    utterance.rate = 0.85;
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice =>
+        voice.lang.toLowerCase().startsWith("en-us")
+    ) || voices.find(voice =>
+        voice.lang.toLowerCase().startsWith("en")
+    );
+
+    if (preferredVoice) {
+        utterance.voice = preferredVoice;
+    }
+
     window.speechSynthesis.speak(utterance);
 }
 
 // ==================== TIMER ====================
 function startTimer() {
     if (timerRunning) return;
+
     timerRunning = true;
-    timerInterval = setInterval(() => {
-        timerSeconds++;
+    timerStartedAt = Date.now() - timerSeconds * 1000;
+
+    timerInterval = window.setInterval(() => {
+        timerSeconds = Math.floor((Date.now() - timerStartedAt) / 1000);
         updateTimerDisplay();
-    }, 1000);
+    }, 250);
 }
 
 function stopTimer() {
-    if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
+    if (timerInterval !== null) {
+        window.clearInterval(timerInterval);
     }
+
+    timerInterval = null;
     timerRunning = false;
+    timerStartedAt = null;
 }
 
 function resetTimer() {
@@ -223,33 +357,68 @@ function resetTimer() {
 function updateTimerDisplay() {
     const minutes = Math.floor(timerSeconds / 60);
     const seconds = timerSeconds % 60;
-    timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    timerDisplay.textContent =
+        `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+// ==================== MESSAGES ====================
+function setMessage(text, type = "") {
+    messageDiv.textContent = text;
+    messageDiv.classList.remove("success", "error");
+
+    if (type) {
+        messageDiv.classList.add(type);
+    }
 }
 
 // ==================== EVENT HANDLERS ====================
-speakBtn.addEventListener('click', () => {
-    if (practiceItems.length > 0 && currentIndex < practiceItems.length) {
-        speakItem(practiceItems[currentIndex].spoken);
+speakBtn.addEventListener("click", () => {
+    const item = practiceItems[currentIndex];
+
+    if (item) {
+        speakItem(item.spoken);
     }
 });
 
-actionBtn.addEventListener('click', () => {
+actionBtn.addEventListener("click", () => {
     if (practiceItems.length === 0) return;
 
-    if (currentIndex < practiceItems.length - 1) {
-        // Move to next item
-        currentIndex++;
-        loadItem(currentIndex);
-    } else {
-        // Finished all 100 items
-        stopTimer();
-        const minutes = Math.floor(timerSeconds / 60);
-        const seconds = timerSeconds % 60;
-        alert(`🎉 Congratulations!\nYou've completed all 100 items.\nTime spent: ${minutes}分${seconds}秒`);
-        // Restart with a new shuffled 100
-        initPractice();
+    // Match the documented behavior: timing begins with the first click on “Next”.
+    if (!timerRunning) {
+        startTimer();
     }
+
+    if (currentIndex < practiceItems.length - 1) {
+        currentIndex += 1;
+        loadItem(currentIndex);
+        return;
+    }
+
+    finishRound();
 });
+
+function finishRound() {
+    stopTimer();
+    stopSpeech();
+
+    const minutes = Math.floor(timerSeconds / 60);
+    const seconds = timerSeconds % 60;
+    const completedCount = practiceItems.length;
+
+    window.alert(
+        `🎉 Congratulations!\n`
+        + `You've completed all ${completedCount} items.\n`
+        + `Time spent: ${minutes}分${seconds}秒`
+    );
+
+    // Preserve the original design: immediately prepare a new random round.
+    // The new round timer remains at 00:00 until the first “Next” click.
+    initPractice();
+}
+
+// Stop queued speech when the user leaves or reloads the page.
+window.addEventListener("beforeunload", stopSpeech);
 
 // ==================== START ====================
 initPractice();

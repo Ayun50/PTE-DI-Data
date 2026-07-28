@@ -1,11 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes"
+    >
+    <meta
+        name="description"
+        content="PTE Academic Describe Image 数据跟读练习工具"
+    >
     <title>PTE DI Data Reading Practice</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" href="https://www.pearsonpte.com.cn/favicon.ico">
+    <link rel="icon" href="https://www.pearsonpte.com.cn/content/dam/global/shared/brand/evolution/favicons/favicon-light-16.png" type="image/x-icon">
 </head>
 <body>
     <div class="container">
@@ -13,29 +20,46 @@
             <h1>📊 PTE DI 数据跟读练习</h1>
         </header>
 
-        <div class="info-bar">
-            <span>进度: <span id="progress">1/50</span></span>
+        <div class="info-bar" aria-label="练习状态">
+            <span>进度: <span id="progress">0/0</span></span>
             <span>计时: <span id="timer-display">00:00</span></span>
         </div>
 
         <main>
-            <div class="data-card">
-                <div id="data-figure" class="data-figure">0</div>
+            <section class="data-card" aria-label="数据跟读练习">
+                <div id="data-figure" class="data-figure">—</div>
 
                 <div class="speak-area">
-                    <button id="speak-btn" class="speak-btn">🔊</button>
+                    <button
+                        id="speak-btn"
+                        class="speak-btn"
+                        type="button"
+                        aria-label="重新朗读当前数据"
+                        title="重新朗读当前数据"
+                        disabled
+                    >🔊</button>
                 </div>
 
                 <div class="button-group">
-                    <button id="action-btn" class="action-btn">下一个</button>
+                    <button
+                        id="action-btn"
+                        class="action-btn"
+                        type="button"
+                        disabled
+                    >下一个</button>
                 </div>
 
-                <div id="message" class="message"></div>
-            </div>
+                <div
+                    id="message"
+                    class="message"
+                    role="status"
+                    aria-live="polite"
+                ></div>
+            </section>
         </main>
 
         <footer class="footer">
-            <p>Designed & Developed By <span>Jimmy Wu</span> © 2026</p>
+            <p>Designed &amp; Developed By <span>Jimmy Wu</span> © 2025</p>
         </footer>
     </div>
 
