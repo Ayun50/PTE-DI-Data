@@ -144,25 +144,12 @@ const MASTER_ITEMS = [
     { display: "9.7 billion", spoken: "nine point seven billion" },
     { display: "3.4 trillion", spoken: "three point four trillion" },
 
-    // Fractions and mixed numbers
-    { display: "1/2", spoken: "one half" },
-    { display: "1/3", spoken: "one third" },
-    { display: "2/3", spoken: "two thirds" },
-    { display: "1/4", spoken: "one quarter" },
-    { display: "3/4", spoken: "three quarters" },
-    { display: "5/8", spoken: "five eighths" },
-    { display: "1 1/2", spoken: "one and a half" },
-    { display: "2 3/4", spoken: "two and three quarters" },
-
     // Ratios, proportions and rates
-    { display: "3:1", spoken: "three to one" },
-    { display: "1:4", spoken: "one to four" },
     { display: "$35 per capita", spoken: "thirty-five dollars per capita" },
 
     // Clock times and durations
     { display: "9:30 a.m.", spoken: "nine thirty a m" },
     { display: "2:45 p.m.", spoken: "two forty-five p m" },
-    { display: "1 hr 45 min", spoken: "one hour forty-five minutes" },
     { display: "90 min", spoken: "ninety minutes" },
     { display: "3.5 hours", spoken: "three point five hours" },
     { display: "45 sec", spoken: "forty-five seconds" },
@@ -171,27 +158,16 @@ const MASTER_ITEMS = [
     { display: "10–15%", spoken: "ten to fifteen percent" },
     { display: "2.5–3.0%", spoken: "two point five to three point zero percent" },
     { display: "18–24", spoken: "eighteen to twenty-four" },
-    { display: "$20–$30", spoken: "twenty to thirty dollars" },
     { display: "-5 to 5", spoken: "minus five to five" },
 
     // Rankings, multipliers and comparisons
     { display: "21st", spoken: "twenty-first" },
-    { display: "2×", spoken: "two times" },
-    { display: "1.5 times", spoken: "one point five times" },
 
     // Measurements and scientific units
-    { display: "5 km", spoken: "five kilometres" },
-    { display: "12.5 km", spoken: "twelve point five kilometres" },
-    { display: "80 km/h", spoken: "eighty kilometres per hour" },
     { display: "1,250 m", spoken: "one thousand two hundred fifty metres" },
     { display: "3.2 kg", spoken: "three point two kilograms" },
-    { display: "750 g", spoken: "seven hundred fifty grams" },
     { display: "2.5 tonnes", spoken: "two point five tonnes" },
-    { display: "1.8 L", spoken: "one point eight litres" },
-    { display: "500 mL", spoken: "five hundred millilitres" },
     { display: "250 people/km²", spoken: "two hundred fifty people per square kilometre" },
-    { display: "40 kWh", spoken: "forty kilowatt hours" },
-    { display: "120 MW", spoken: "one hundred twenty megawatts" },
 
     // Angles, coordinates and scientific notation
     { display: "45°", spoken: "forty-five degrees" },
@@ -200,7 +176,6 @@ const MASTER_ITEMS = [
     { display: "120°S", spoken: "one hundred twenty degrees south" },
 
     // Common chart abbreviations and reporting periods
-    { display: "1.2K", spoken: "one point two thousand" },
     { display: "3.5M", spoken: "three point five million" },
     { display: "2.1B", spoken: "two point one billion" },
     { display: "2019/20", spoken: "twenty nineteen to twenty twenty" },
@@ -209,7 +184,6 @@ const MASTER_ITEMS = [
     { display: "$12.50", spoken: "twelve dollars fifty cents" },
     { display: "£8.99", spoken: "eight pounds ninety-nine pence" },
     { display: "€3.5 million", spoken: "three point five million euros" },
-    { display: "¥2,500", spoken: "two thousand five hundred yen" }
 ];
 
 // ==================== SETTINGS ====================
