@@ -1,46 +1,64 @@
-# PTE DI 数据跟读练习
+# 📊 PTE-A DI 数据跟读练习 | PTE-A Describe Image Data Practice
 
-一个为 PTE Academic Describe Image 设计的数据跟读工具，帮助练习图表、表格和信息图中的常见数字表达。
+🌐 A browser-based practice tool designed to help PTE-A learners improve their ability to describe data in the Describe Image task.
 
-## 本版本包含的数据类型
+一个专为 PTE-A 考生设计的在线数据跟读练习工具，帮助学生提高 Describe Image（DI）题型中的数据表达、口语流利度和信息组织能力。
 
-- 基础数字、大数、年份、年代、季度和报告期
-- 百分比、小数、正负数和温度
-- 美元、英镑、欧元、日元及带小数的价格
-- 分数、带分数、比例、占比和发生率
-- 时间、时长、数值范围和置信区间
-- 序数、排名、倍数和 fold 表达
-- 距离、速度、重量、容量、面积、密度、能源和存储单位
-- 角度、经纬度、科学计数法
-- K、M、B 等图表缩写
+## 👨‍🏫 About the Creator | 关于作者
 
-## 练习逻辑
+I am an English educator with extensive experience teaching PTE and IELTS.
 
-1. 每轮从完整数据池随机抽取最多 100 项。
-2. 页面显示第一项并尝试自动朗读。
-3. 计时从第一次点击“下一个”开始。
-4. 完成当前轮次后显示实际题数和所用时间。
-5. 确认提示后自动生成新一轮；新一轮计时保持在 00:00，直到第一次点击“下一个”。
+我是一名英语教育工作者，长期从事 PTE、IELTS 及学术英语教学。
 
-## 文件
+Through teaching, I noticed that many students understood charts and numbers but struggled to describe data fluently and naturally under time pressure.
 
-- `index.html`
-- `style.css`
-- `script.js`
-- `README.md`
+在教学过程中，我发现很多学生虽然能够看懂图表和数据，却很难在有限时间内快速、流利地组织语言并完成数据描述。
 
-直接双击 `index.html` 即可使用。浏览器的自动播放策略可能阻止第一项自动发音，此时点击喇叭按钮即可。语音功能依赖浏览器的 Web Speech API 和本机安装的英文语音。
+I designed this tool to provide focused, repeatable speaking practice based on real PTE-style data.
 
-## 自定义
+因此，我设计了这个工具，让学生可以围绕 PTE 风格的数据进行针对性的反复跟读和口语练习。
 
-在 `script.js` 的 `MASTER_ITEMS` 中添加：
+## 🎯 Key Features | 主要功能
 
-```javascript
-{ display: "25%", spoken: "twenty-five percent" }
-```
+- 📊 **Data Practice** — Practice describing different types of charts and numerical data
+- 🎧 **Listen & Repeat** — Listen to model descriptions and practice by repeating them
+- 🗣️ **Speaking Practice** — Build fluency and confidence in describing data
+- ⏱️ **Timed Practice** — Practice responding within PTE-style time limits
+- 🔄 **Repeated Practice** — Easily repeat the same type of question until fluent
+- 📱 **Responsive Design** — Works on phones, tablets and computers
+- 🧩 **Expandable Content** — Easily add new data questions and practice materials
 
-`display` 是页面显示内容，`spoken` 是浏览器朗读文本。
+## 🚀 How to Use | 如何使用
 
-## 开源协议
+1. Choose a data question. https://ayun50.github.io/PTE-DI-Data/
+2. Review the chart and identify the key information.
+3. Listen to the model description.
+4. Repeat the description aloud.
+5. Practice again until the description becomes fluent.
 
-本项目基于 MIT 协议开源。注明出处：Jimmy Wu, https://github.com/Ayun50, ayun50@msn.com
+选择题目 → 阅读图表 → 听示范 → 跟读 → 重复练习。
+
+## 🛠️ Technology | 技术栈
+
+- HTML5 / CSS3
+- Vanilla JavaScript
+- Web Speech API
+- JSON
+
+## 🌱 Educational Purpose | 教育理念
+
+> **Understanding data is only the first step. Students also need to learn how to turn information into clear spoken language.**
+
+> **看懂数据只是第一步，学生还需要学会把数据转化成清晰、流利的语言。**
+
+This project was created from a real classroom problem and reflects my interest in using technology to provide more focused and engaging speaking practice.
+
+这个项目源于真实的课堂问题，也体现了我利用教育技术为学生提供更有针对性、更高效口语练习的探索。
+
+## 📄 License | 开源协议
+
+MIT License
+
+**Created by Jimmy Wu**  
+GitHub: https://github.com/Ayun50  
+Email: ayun50@msn.com
