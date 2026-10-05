@@ -13,8 +13,11 @@ const MASTER_ITEMS = [
     { display: "880", spoken: "eight hundred eighty" },
     { display: "425", spoken: "four hundred twenty-five" },
     { display: "1765", spoken: "seventeen sixty-five" },
+    { display: "2005", spoken: "two thousand five" },
     { display: "1969", spoken: "nineteen sixty-nine" },
+    { display: "2001", spoken: "two thousand one" },
     { display: "1985", spoken: "nineteen eighty-five" },
+    { display: "2009", spoken: "two thousand nine" },
     { display: "2045", spoken: "twenty forty-five" },
     { display: "2032", spoken: "twenty thirty-two" },
     { display: "2027", spoken: "twenty twenty-seven" },
@@ -80,13 +83,13 @@ const MASTER_ITEMS = [
     { display: "31.1", spoken: "thirty-one point one" },
     { display: "39.4", spoken: "thirty-nine point four" },
     { display: "7.5", spoken: "seven point five" },
-    { display: "91.406", spoken: "ninety-one point four zero six" },
+    { display: "91.06", spoken: "ninety-one point zero six" },
     { display: "0.25", spoken: "point two five" },
     { display: "-3.14", spoken: "minus three point one four" },
     { display: "6.02", spoken: "six point zero two" },
     { display: "9.8", spoken: "nine point eight" },
     { display: "-10.01", spoken: "minus ten point zero one" },
-    { display: "0.99", spoken: "point nine nine" },
+    { display: "0.99", spoken: "point ninety-nine" },
     { display: "100.5", spoken: "one hundred point five" },
 
     // Temperatures
@@ -114,11 +117,11 @@ const MASTER_ITEMS = [
     { display: "$850 million", spoken: "eight hundred fifty million dollars" },
     { display: "$9,999", spoken: "ninety-nine hundred ninety-nine dollars" },
     { display: "£5,100,000", spoken: "five point one million pounds" },
-    { display: "$13,750,000", spoken: "thirteen million seven hundred fifty thousand dollars" },
+    { display: "$13,750,000", spoken: "thirteen point seventy-five thousand dollars" },
     { display: "$255,000", spoken: "two hundred fifty-five thousand dollars" },
     { display: "$475,000", spoken: "four hundred seventy-five thousand dollars" },
     { display: "£45,100", spoken: "forty-five thousand one hundred pounds" },
-    { display: "£91,400", spoken: "ninety-one thousand four hundred pounds" },
+    { display: "£91,400", spoken: "ninety-one point four thousand pounds" },
     { display: "$2.5 million", spoken: "two point five million dollars" },
     { display: "£7.8 billion", spoken: "seven point eight billion pounds" },
     { display: "$12.2 million", spoken: "twelve point two million dollars" },
@@ -156,7 +159,7 @@ const MASTER_ITEMS = [
 
     // Ranges and intervals
     { display: "10–15%", spoken: "ten to fifteen percent" },
-    { display: "2.5–3.0%", spoken: "two point five to three point zero percent" },
+    { display: "2.5–3.0%", spoken: "two point five to three percent" },
     { display: "18–24", spoken: "eighteen to twenty-four" },
     { display: "-5 to 5", spoken: "minus five to five" },
 
@@ -164,7 +167,7 @@ const MASTER_ITEMS = [
     { display: "21st", spoken: "twenty-first" },
 
     // Measurements and scientific units
-    { display: "1,250 m", spoken: "one thousand two hundred fifty metres" },
+    { display: "1,250 m", spoken: "twelve hundred fifty metres" },
     { display: "3.2 kg", spoken: "three point two kilograms" },
     { display: "2.5 tonnes", spoken: "two point five tonnes" },
     { display: "250 people/km²", spoken: "two hundred fifty people per square kilometre" },
@@ -181,8 +184,8 @@ const MASTER_ITEMS = [
     { display: "2019/20", spoken: "twenty nineteen to twenty twenty" },
 
     // Additional currencies and prices
-    { display: "$12.50", spoken: "twelve dollars fifty cents" },
-    { display: "£8.99", spoken: "eight pounds ninety-nine pence" },
+    { display: "$12.50", spoken: "twelve point five dollars" },
+    { display: "£8.99", spoken: "eight point ninety-nine pounds" },
     { display: "€3.5 million", spoken: "three point five million euros" },
 ];
 
