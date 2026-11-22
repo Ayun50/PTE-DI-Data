@@ -1,4 +1,4 @@
-# 📊 PTE-A DI 数据跟读练习 | PTE-A Describe Image Data Practice
+# 📊 PTE Describe Image 数据跟读练习 | Data Practice
 
 🌐 A browser-based practice tool designed to help PTE-A learners improve their ability to describe data in the Describe Image task.
 
