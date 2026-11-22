@@ -191,6 +191,8 @@ const MASTER_ITEMS = [
 
 // ==================== SETTINGS ====================
 const ROUND_SIZE = 100;
+const SPEECH_RATE = 0.85;
+const DEBUG_SPEECH = false; // 设为 true 可在控制台查看选中的语音
 
 // Shuffle an array in place.
 function shuffleArray(array) {
@@ -209,6 +211,13 @@ let timerInterval = null;
 let timerRunning = false;
 let timerStartedAt = null;
 
+// Speech state
+let rankedVoices = [];              // 按质量从高到低排序的英文语音
+const failedVoiceURIs = new Set();  // 朗读失败过的语音（如离线时的云端语音）
+let speechSessionId = 0;            // 每次朗读的会话 id，用于丢弃过期回调
+let pendingSpeech = null;           // 语音列表尚未加载完成时暂存的朗读请求
+let activeUtterance = null;
+
 // ==================== DOM ELEMENTS ====================
 const dataFigure = document.getElementById("data-figure");
 const speakBtn = document.getElementById("speak-btn");
@@ -217,46 +226,125 @@ const progressSpan = document.getElementById("progress");
 const timerDisplay = document.getElementById("timer-display");
 const messageDiv = document.getElementById("message");
 
-// ==================== INITIALIZATION ====================
-function initPractice() {
-    stopSpeech();
+// ==================== SPEECH ENGINE SELECTION ====================
+// 思路：Web Speech API 本身不提供“声音”，它只是调用系统里安装的语音引擎。
+// 不同电脑、不同浏览器拿到的语音列表顺序和质量差异极大，直接取 voices[0]
+// 很可能选中机械的 SAPI / eSpeak 语音。下面按“语言 + 名称关键词”给英文语音打分，
+// 优先使用自然度高的语音（Google、Edge Natural、macOS Enhanced/Siri 等）。
 
-    const shuffled = shuffleArray([...MASTER_ITEMS]);
-    const itemCount = Math.min(ROUND_SIZE, shuffled.length);
+// 自然度较高的语音名称特征
+const HIGH_QUALITY_HINTS = [
+    "natural", "neural", "premium", "enhanced", "online",
+    "google", "siri",
+    "samantha", "alex", "ava", "allison", "susan", "karen", "moira", "tessa", "serena",
+    "aria", "jenny", "guy", "emma", "michelle", "ana", "christopher",
+    "eric", "roger", "steffan", "andrew", "brian", "sonia", "ryan", "libby",
+];
 
-    practiceItems = shuffled.slice(0, itemCount);
-    currentIndex = 0;
+// 已知机械、低质量或非目标语音
+const LOW_QUALITY_HINTS = [
+    "desktop",   // Windows 旧版 SAPI，如 "Microsoft David Desktop"
+    "compact",   // 低质量压缩语音
+    "sapi",      // 旧 SAPI 语音
+    "espeak",    // Linux 常见机械语音
+    "e-speak",
+    "festival",
+    "flite",
+    "pico",      // 低质量嵌入式语音
+    "speech dispatcher",
+];
 
-    resetTimer();
-    setMessage("");
-    actionBtn.disabled = practiceItems.length === 0;
-    speakBtn.disabled = practiceItems.length === 0;
+// macOS 上的趣味语音和老式语音，读数字效果很差，必须排除
+const LEGACY_OR_NOVELTY_HINTS = [
+    "albert", "bad news", "bahh", "bells", "boing", "bubbles", "cellos",
+    "deranged", "good news", "hologram", "hysterical", "jester", "organ",
+    "pipe organ", "superstar", "trinoids", "whisper", "wobble", "zarvox",
+    "fred", "junior", "kathy", "ralph", "princess", "agnes", "vicki", "bruce",
+];
 
-    if (practiceItems.length === 0) {
-        dataFigure.textContent = "—";
-        progressSpan.textContent = "0/0";
-        setMessage("没有可练习的数据。", "error");
-        return;
-    }
-
-    loadItem(0);
+function normalizeLang(lang) {
+    return (lang || "").replace(/_/g, "-").toLowerCase();
 }
 
-function loadItem(index) {
-    const item = practiceItems[index];
+function scoreVoice(voice) {
+    const name = (voice.name || "").toLowerCase();
+    const lang = normalizeLang(voice.lang);
+    let score = 0;
 
-    if (!item) {
-        setMessage("无法加载当前数据。", "error");
-        return;
+    // 1. 语言优先级：en-US 最佳，其他英语次之，非英语大幅降权
+    if (lang === "en-us") {
+        score += 100;
+    } else if (/^en-(gb|au|ca|ie|nz|za|in|sg)$/.test(lang)) {
+        score += 80;
+    } else if (lang.startsWith("en")) {
+        score += 60;
+    } else {
+        score -= 200;
     }
 
-    dataFigure.textContent = item.display;
-    progressSpan.textContent = `${index + 1}/${practiceItems.length}`;
-    setMessage("");
+    // 2. 名称关键词
+    if (HIGH_QUALITY_HINTS.some(hint => name.includes(hint))) score += 50;
+    if (LOW_QUALITY_HINTS.some(hint => name.includes(hint))) score -= 60;
+    if (LEGACY_OR_NOVELTY_HINTS.some(hint => name.includes(hint))) score -= 150;
 
-    // Browsers may block autoplay until the user has interacted with the page.
-    // The speaker button remains available for manual replay.
-    speakItem(item.spoken, false);
+    // 3. 云端语音（localService === false）通常是 Google / Edge Natural 这类
+    //    高质量语音，略微加分；离线失败会由 failedVoiceURIs 自动回退
+    if (voice.localService === false) score += 10;
+
+    // 4. 系统默认语音通常不是最好的
+    if (voice.default) score -= 5;
+
+    return score;
+}
+
+function rankEnglishVoices(voices) {
+    const englishVoices = voices.filter(v => normalizeLang(v.lang).startsWith("en"));
+    if (englishVoices.length === 0) return [];
+
+    return englishVoices
+        .map(voice => ({ voice, score: scoreVoice(voice) }))
+        .sort((a, b) => b.score - a.score)
+        .map(entry => entry.voice);
+}
+
+function refreshVoices() {
+    if (!speechIsSupported()) return;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return; // 尚未加载完成
+
+    rankedVoices = rankEnglishVoices(voices);
+    failedVoiceURIs.clear(); // 语音列表变化后，重新给之前失败的语音一次机会
+
+    if (DEBUG_SPEECH) {
+        console.info(
+            "[speech] ranked voices:",
+            rankedVoices.map(v =>
+                `${v.name} (${v.lang}${v.localService ? "" : ", cloud"})`
+            )
+        );
+    }
+}
+
+function getCandidateVoices() {
+    return rankedVoices.filter(voice => !failedVoiceURIs.has(voice.voiceURI));
+}
+
+// 缓存的语音对象在部分浏览器上可能失效，speak 前按 voiceURI 重新匹配
+function resolveCurrentVoice(voice) {
+    if (!voice) return null;
+    const current = window.speechSynthesis.getVoices() || [];
+    return current.find(v => v.voiceURI === voice.voiceURI) || voice;
+}
+
+function handleVoicesChanged() {
+    refreshVoices();
+
+    if (pendingSpeech) {
+        const pending = pendingSpeech;
+        pendingSpeech = null;
+        doSpeak(pending.text, pending.sessionId, pending.showUnsupportedMessage);
+    }
 }
 
 // ==================== SPEECH ====================
@@ -265,10 +353,80 @@ function speechIsSupported() {
         && typeof SpeechSynthesisUtterance !== "undefined";
 }
 
-function stopSpeech() {
-    if (speechIsSupported()) {
+function cancelSynthesis() {
+    if (!speechIsSupported()) return;
+
+    try {
         window.speechSynthesis.cancel();
+    } catch (error) {
+        // 忽略不同浏览器实现上的差异
     }
+}
+
+function stopSpeech() {
+    speechSessionId += 1;
+    pendingSpeech = null;
+    activeUtterance = null;
+    cancelSynthesis();
+}
+
+function createUtterance(text, voice) {
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang;
+    } else {
+        utterance.lang = "en-US";
+    }
+
+    utterance.rate = SPEECH_RATE;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    return utterance;
+}
+
+function doSpeak(text, sessionId, showUnsupportedMessage) {
+    if (sessionId !== speechSessionId) return; // 已被新的朗读请求取代
+
+    const synth = window.speechSynthesis;
+    const candidates = getCandidateVoices();
+    const voice = resolveCurrentVoice(candidates[0] || null);
+
+    const utterance = createUtterance(text, voice);
+    activeUtterance = utterance;
+
+    utterance.onerror = (event) => {
+        const reason = event.error;
+
+        // 自己取消导致的中断不算失败
+        if (reason === "interrupted" || reason === "canceled") return;
+
+        // 浏览器阻止了自动播放：提示用户手动点击扬声器
+        if (reason === "not-allowed") {
+            if (showUnsupportedMessage) {
+                setMessage("浏览器阻止了自动朗读，请点击扬声器按钮重试。", "error");
+            }
+            return;
+        }
+
+        // 该语音本次无法使用（离线、语音包缺失等），下次换一个候选
+        if (voice && voice.voiceURI) {
+            failedVoiceURIs.add(voice.voiceURI);
+        }
+
+        if (DEBUG_SPEECH) {
+            console.warn("[speech] utterance error:", reason, voice && voice.name);
+        }
+    };
+
+    // Chrome 在 paused 状态下 speak 可能无声，先恢复
+    if (synth.paused) {
+        synth.resume();
+    }
+
+    synth.speak(utterance);
 }
 
 function speakItem(text, showUnsupportedMessage = true) {
@@ -282,24 +440,36 @@ function speakItem(text, showUnsupportedMessage = true) {
         return;
     }
 
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.85;
-
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(voice =>
-        voice.lang.toLowerCase().startsWith("en-us")
-    ) || voices.find(voice =>
-        voice.lang.toLowerCase().startsWith("en")
-    );
-
-    if (preferredVoice) {
-        utterance.voice = preferredVoice;
+    // Chrome 的 getVoices() 首次常返回空，需要主动尝试一次
+    if (rankedVoices.length === 0) {
+        refreshVoices();
     }
 
-    window.speechSynthesis.speak(utterance);
+    const sessionId = ++speechSessionId;
+    cancelSynthesis();
+
+    // 语音列表仍然为空：等 voiceschanged 再朗读，
+    // 避免首次朗读使用系统默认的低质量语音
+    if (rankedVoices.length === 0) {
+        pendingSpeech = { text, sessionId, showUnsupportedMessage };
+
+        // 兜底：即使 voiceschanged 不触发，也要发声
+        window.setTimeout(() => {
+            if (pendingSpeech && pendingSpeech.sessionId === sessionId) {
+                const pending = pendingSpeech;
+                pendingSpeech = null;
+                doSpeak(pending.text, pending.sessionId, pending.showUnsupportedMessage);
+            }
+        }, 1200);
+        return;
+    }
+
+    pendingSpeech = null;
+
+    // 让 cancel() 先完成，规避 Chrome 中“cancel 后立即 speak 被吞”的问题
+    window.setTimeout(() => {
+        doSpeak(text, sessionId, showUnsupportedMessage);
+    }, 0);
 }
 
 // ==================== TIMER ====================
@@ -347,6 +517,48 @@ function setMessage(text, type = "") {
     if (type) {
         messageDiv.classList.add(type);
     }
+}
+
+// ==================== INITIALIZATION ====================
+function initPractice() {
+    stopSpeech();
+
+    const shuffled = shuffleArray([...MASTER_ITEMS]);
+    const itemCount = Math.min(ROUND_SIZE, shuffled.length);
+
+    practiceItems = shuffled.slice(0, itemCount);
+    currentIndex = 0;
+
+    resetTimer();
+    setMessage("");
+    actionBtn.disabled = practiceItems.length === 0;
+    speakBtn.disabled = practiceItems.length === 0 || !speechIsSupported();
+
+    if (practiceItems.length === 0) {
+        dataFigure.textContent = "—";
+        progressSpan.textContent = "0/0";
+        setMessage("没有可练习的数据。", "error");
+        return;
+    }
+
+    loadItem(0);
+}
+
+function loadItem(index) {
+    const item = practiceItems[index];
+
+    if (!item) {
+        setMessage("无法加载当前数据。", "error");
+        return;
+    }
+
+    dataFigure.textContent = item.display;
+    progressSpan.textContent = `${index + 1}/${practiceItems.length}`;
+    setMessage("");
+
+    // Browsers may block autoplay until the user has interacted with the page.
+    // The speaker button remains available for manual replay.
+    speakItem(item.spoken, false);
 }
 
 // ==================== EVENT HANDLERS ====================
@@ -398,4 +610,10 @@ function finishRound() {
 window.addEventListener("beforeunload", stopSpeech);
 
 // ==================== START ====================
+if (speechIsSupported()) {
+    // Chrome / Edge 的语音列表是异步加载的，必须监听 voiceschanged
+    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
+    refreshVoices();
+}
+
 initPractice();
