@@ -4,7 +4,7 @@ const MASTER_ITEMS = [
     { display: "23", spoken: "twenty-three" },
     { display: "150", spoken: "one hundred fifty" },
     { display: "4,000", spoken: "four thousand" },
-    { display: "4,500", spoken: "forty five hundred" },
+    { display: "4,500", spoken: "forty-five hundred" },
     { display: "78,900", spoken: "seventy-eight thousand nine hundred" },
     { display: "1,000,000", spoken: "one million" },
     { display: "3,450,000", spoken: "three point four five million" },
@@ -27,7 +27,6 @@ const MASTER_ITEMS = [
 
     // Years & dates
     { display: "1990", spoken: "nineteen ninety" },
-    { display: "2001", spoken: "two thousand one" },
     { display: "2010", spoken: "twenty ten" },
     { display: "2023", spoken: "twenty twenty-three" },
     { display: "1950s", spoken: "the nineteen fifties" },
@@ -89,7 +88,7 @@ const MASTER_ITEMS = [
     { display: "6.02", spoken: "six point zero two" },
     { display: "9.8", spoken: "nine point eight" },
     { display: "-10.01", spoken: "minus ten point zero one" },
-    { display: "0.99", spoken: "point ninety-nine" },
+    { display: "0.99", spoken: "point nine nine" },
     { display: "100.5", spoken: "one hundred point five" },
 
     // Temperatures
@@ -117,7 +116,7 @@ const MASTER_ITEMS = [
     { display: "$850 million", spoken: "eight hundred fifty million dollars" },
     { display: "$9,999", spoken: "ninety-nine hundred ninety-nine dollars" },
     { display: "£5,100,000", spoken: "five point one million pounds" },
-    { display: "$13,750,000", spoken: "thirteen point seventy-five thousand dollars" },
+    { display: "$13,750,000", spoken: "thirteen point seven five million dollars" },
     { display: "$255,000", spoken: "two hundred fifty-five thousand dollars" },
     { display: "$475,000", spoken: "four hundred seventy-five thousand dollars" },
     { display: "£45,100", spoken: "forty-five thousand one hundred pounds" },
@@ -185,7 +184,7 @@ const MASTER_ITEMS = [
 
     // Additional currencies and prices
     { display: "$12.50", spoken: "twelve point five dollars" },
-    { display: "£8.99", spoken: "eight point ninety-nine pounds" },
+    { display: "£8.99", spoken: "eight pounds ninety-nine" },
     { display: "€3.5 million", spoken: "three point five million euros" },
 ];
 
@@ -214,10 +213,18 @@ let timerStartedAt = null;
 // Speech state
 let rankedVoices = [];              // 按质量从高到低排序的英文语音
 let cachedVoiceList = [];           // 最近一次 getVoices() 的完整列表
-const failedVoiceURIs = new Set();  // 朗读失败过的语音（如离线时的云端语音）
+let voicesLoaded = false;           // 语音列表是否成功加载过（区别于“加载好了但没有英文语音”）
+const failedVoices = new Map();     // voiceURI -> 失败时间戳，带过期，避免瞬时错误永久拉黑
+const VOICE_RETRY_MS = 5 * 60 * 1000;
 let speechSessionId = 0;            // 每次朗读的会话 id，用于丢弃过期回调
 let pendingSpeech = null;           // 语音列表尚未加载完成时暂存的朗读请求
+let pendingSpeechTimer = null;      // 等待 voiceschanged 的兜底定时器
 let activeUtterance = null;
+
+// 交互节流：防止连点“下一个”一次跳过两条数据
+const NEXT_COOLDOWN_MS = 260;
+let lastAdvanceAt = 0;
+
 
 // ==================== DOM ELEMENTS ====================
 const dataFigure = document.getElementById("data-figure");
@@ -226,6 +233,12 @@ const actionBtn = document.getElementById("action-btn");
 const progressSpan = document.getElementById("progress");
 const timerDisplay = document.getElementById("timer-display");
 const messageDiv = document.getElementById("message");
+
+// 本轮结算层（替代 window.alert，不再阻塞主线程）
+const roundOverlay = document.getElementById("round-overlay");
+const roundCountEl = document.getElementById("round-count");
+const roundTimeEl = document.getElementById("round-time");
+const roundRestartBtn = document.getElementById("round-restart");
 
 // ==================== SPEECH ENGINE SELECTION ====================
 // 思路：Web Speech API 本身不提供“声音”，它只是调用系统里安装的语音引擎。
@@ -331,15 +344,20 @@ function rankEnglishVoices(voices) {
 }
 
 function refreshVoices() {
-    if (!speechIsSupported()) return;
+    if (!speechIsSupported()) return false;
 
     const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return; // 尚未加载完成
+    if (!voices || voices.length === 0) return false; // 尚未加载完成
+
+    // 只要拿到过非空列表，就认为“语音已就绪”。
+    // 此时即使没有英文语音（rankedVoices 为空），也不该再等 voiceschanged，
+    // 否则每次朗读都会白等 1.2 秒。
+    voicesLoaded = true;
 
     // 缓存完整列表，供 resolveCurrentVoice 做失效检测
     cachedVoiceList = voices;
     rankedVoices = rankEnglishVoices(voices);
-    failedVoiceURIs.clear(); // 语音列表变化后，重新给之前失败的语音一次机会
+    failedVoices.clear(); // 语音列表变化后，重新给之前失败的语音一次机会
 
     if (DEBUG_SPEECH) {
         console.info(
@@ -349,28 +367,49 @@ function refreshVoices() {
             )
         );
     }
+
+    return true;
+}
+
+function isVoiceFailed(voiceURI) {
+    if (!voiceURI) return false;
+
+    const failedAt = failedVoices.get(voiceURI);
+    if (failedAt === undefined) return false;
+
+    if (Date.now() - failedAt > VOICE_RETRY_MS) {
+        failedVoices.delete(voiceURI); // 过期后重新给一次机会
+        return false;
+    }
+
+    return true;
+}
+
+function markVoiceFailed(voiceURI) {
+    if (!voiceURI) return;
+
+    failedVoices.set(voiceURI, Date.now());
+
+    if (DEBUG_SPEECH) {
+        console.warn("[speech] voice temporarily blacklisted:", voiceURI);
+    }
 }
 
 function getCandidateVoices() {
-    return rankedVoices.filter(voice => !failedVoiceURIs.has(voice.voiceURI));
+    return rankedVoices.filter(voice => !isVoiceFailed(voice.voiceURI));
 }
 
 // 在缓存的语音列表里重新匹配，避免直接使用可能失效的旧引用。
 // 不再调用 getVoices()；语音列表变化时由 voiceschanged 刷新缓存。
-// 若引用仍失效，speak 会触发 onerror，failedVoiceURIs 会剔除它并自动换下一个。
+// 若引用仍失效，speak 会触发 onerror，failedVoices 会剔除它并自动换下一个。
 function resolveCurrentVoice(voice) {
     if (!voice) return null;
     return cachedVoiceList.find(v => v.voiceURI === voice.voiceURI) || voice;
 }
 
 function handleVoicesChanged() {
-    refreshVoices();
-
-    if (pendingSpeech) {
-        const pending = pendingSpeech;
-        pendingSpeech = null;
-        doSpeak(pending.text, pending.sessionId, pending.showUnsupportedMessage);
-    }
+    if (!refreshVoices()) return;
+    flushPendingSpeech();
 }
 
 // ==================== SPEECH ====================
@@ -389,9 +428,27 @@ function cancelSynthesis() {
     }
 }
 
+function clearPendingSpeech() {
+    pendingSpeech = null;
+
+    if (pendingSpeechTimer !== null) {
+        window.clearTimeout(pendingSpeechTimer);
+        pendingSpeechTimer = null;
+    }
+}
+
+// 语音列表就绪后补发暂存的朗读请求
+function flushPendingSpeech() {
+    if (!pendingSpeech) return;
+
+    const pending = pendingSpeech;
+    clearPendingSpeech();
+    doSpeak(pending.text, pending.sessionId, pending.showUnsupportedMessage);
+}
+
 function stopSpeech() {
     speechSessionId += 1;
-    pendingSpeech = null;
+    clearPendingSpeech();
     activeUtterance = null;
     cancelSynthesis();
 }
@@ -413,7 +470,11 @@ function createUtterance(text, voice) {
     return utterance;
 }
 
-function doSpeak(text, sessionId, showUnsupportedMessage) {
+// 只有“这条语音本身不可用”才值得拉黑。audio-busy / network 之类的瞬时错误
+// 与语音质量无关，拉黑会造成整场练习永久降级成默认语音。
+const FATAL_VOICE_ERRORS = ["voice-unavailable", "synthesis-failed"];
+
+function doSpeak(text, sessionId, showUnsupportedMessage, attempt = 1) {
     if (sessionId !== speechSessionId) return; // 已被新的朗读请求取代
 
     const synth = window.speechSynthesis;
@@ -423,8 +484,16 @@ function doSpeak(text, sessionId, showUnsupportedMessage) {
     const utterance = createUtterance(text, voice);
     activeUtterance = utterance;
 
+    let started = false;
+    let failed = false;
+
+    utterance.onstart = () => {
+        started = true;
+    };
+
     utterance.onerror = (event) => {
         const reason = event.error;
+        failed = true;
 
         // 自己取消导致的中断不算失败
         if (reason === "interrupted" || reason === "canceled") return;
@@ -437,22 +506,40 @@ function doSpeak(text, sessionId, showUnsupportedMessage) {
             return;
         }
 
-        // 该语音本次无法使用（离线、语音包缺失等），下次换一个候选
-        if (voice && voice.voiceURI) {
-            failedVoiceURIs.add(voice.voiceURI);
-        }
-
         if (DEBUG_SPEECH) {
             console.warn("[speech] utterance error:", reason, voice && voice.name);
+        }
+
+        // 该语音本次确实无法使用（离线、语音包缺失等）：拉黑并立刻换下一个候选
+        if (FATAL_VOICE_ERRORS.includes(reason)) {
+            markVoiceFailed(voice && voice.voiceURI);
+
+            if (attempt < 2 && sessionId === speechSessionId) {
+                doSpeak(text, sessionId, showUnsupportedMessage, attempt + 1);
+            }
         }
     };
 
     // Chrome 在 paused 状态下 speak 可能无声，先恢复
     if (synth.paused) {
-        synth.resume();
+        try {
+            synth.resume();
+        } catch (error) {
+            // 忽略不同浏览器实现上的差异
+        }
     }
 
     synth.speak(utterance);
+
+    // 看门狗：Chrome 偶发让 utterance “凭空消失”（既不 onstart 也不报错）。
+    // 450ms 内没有任何朗读迹象就补一次，这一次不再 cancel。
+    window.setTimeout(() => {
+        if (started || failed || sessionId !== speechSessionId) return;
+        if (synth.speaking || synth.pending) return;
+        if (attempt >= 2) return;
+
+        doSpeak(text, sessionId, showUnsupportedMessage, attempt + 1);
+    }, 450);
 }
 
 function speakItem(text, showUnsupportedMessage = true) {
@@ -466,36 +553,42 @@ function speakItem(text, showUnsupportedMessage = true) {
         return;
     }
 
+    const synth = window.speechSynthesis;
+
     // Chrome 的 getVoices() 首次常返回空，需要主动尝试一次
-    if (rankedVoices.length === 0) {
+    if (!voicesLoaded) {
         refreshVoices();
     }
 
     const sessionId = ++speechSessionId;
-    cancelSynthesis();
 
-    // 语音列表仍然为空：等 voiceschanged 再朗读，
-    // 避免首次朗读使用系统默认的低质量语音
-    if (rankedVoices.length === 0) {
+    // 只有真的有语音在朗读/排队时才 cancel。
+    // 关键：cancel 与 speak 必须留在同一个用户手势的调用栈里；
+    // 一旦跨进 setTimeout，Safari / iOS 会判定为非用户触发而静默丢弃
+    // （连 not-allowed 都不会报，表现为完全没声音）。
+    if (synth.speaking || synth.pending || synth.paused) {
+        cancelSynthesis();
+    }
+
+    // 语音列表还没就绪：等 voiceschanged 再读，
+    // 避免第一声用系统默认的低质量语音
+    if (!voicesLoaded) {
+        clearPendingSpeech();
         pendingSpeech = { text, sessionId, showUnsupportedMessage };
 
         // 兜底：即使 voiceschanged 不触发，也要发声
-        window.setTimeout(() => {
-            if (pendingSpeech && pendingSpeech.sessionId === sessionId) {
-                const pending = pendingSpeech;
-                pendingSpeech = null;
-                doSpeak(pending.text, pending.sessionId, pending.showUnsupportedMessage);
-            }
+        pendingSpeechTimer = window.setTimeout(() => {
+            if (!pendingSpeech || pendingSpeech.sessionId !== sessionId) return;
+            flushPendingSpeech();
         }, 1200);
         return;
     }
 
-    pendingSpeech = null;
+    clearPendingSpeech();
 
-    // 让 cancel() 先完成，规避 Chrome 中“cancel 后立即 speak 被吞”的问题
-    window.setTimeout(() => {
-        doSpeak(text, sessionId, showUnsupportedMessage);
-    }, 0);
+    // 已就绪但没有英文语音时 rankedVoices 为空，
+    // doSpeak 会用系统默认语音（voice = null），不再白等 1.2 秒
+    doSpeak(text, sessionId, showUnsupportedMessage);
 }
 
 // ==================== TIMER ====================
@@ -527,12 +620,23 @@ function resetTimer() {
     updateTimerDisplay();
 }
 
-function updateTimerDisplay() {
-    const minutes = Math.floor(timerSeconds / 60);
-    const seconds = timerSeconds % 60;
+function formatDuration(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
 
-    timerDisplay.textContent =
-        `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+let lastTimerText = "";
+
+function updateTimerDisplay() {
+    const next = formatDuration(timerSeconds);
+
+    // 秒数没变就不碰 DOM：250ms 轮询里 4 次只有 1 次真的需要重绘
+    if (next === lastTimerText) return;
+
+    lastTimerText = next;
+    timerDisplay.textContent = next;
 }
 
 // ==================== MESSAGES ====================
@@ -554,6 +658,7 @@ function initPractice() {
 
     practiceItems = shuffled.slice(0, itemCount);
     currentIndex = 0;
+    lastAdvanceAt = 0; // 新一轮的第一下点击不该被节流吃掉
 
     resetTimer();
     setMessage("");
@@ -567,10 +672,10 @@ function initPractice() {
         return;
     }
 
-    loadItem(0);
+    loadItem(0, false);
 }
 
-function loadItem(index) {
+function loadItem(index, showAutoplayHint = true) {
     const item = practiceItems[index];
 
     if (!item) {
@@ -582,22 +687,28 @@ function loadItem(index) {
     progressSpan.textContent = `${index + 1}/${practiceItems.length}`;
     setMessage("");
 
-    // Browsers may block autoplay until the user has interacted with the page.
-    // The speaker button remains available for manual replay.
-    speakItem(item.spoken, false);
+    // 页面首次加载时的朗读大概率会被浏览器拦下，这时不弹提示；
+    // 之后每一题都由用户点击触发，被拦下就该明确告知。
+    speakItem(item.spoken, showAutoplayHint);
 }
 
 // ==================== EVENT HANDLERS ====================
-speakBtn.addEventListener("click", () => {
+function replayCurrent() {
     const item = practiceItems[currentIndex];
 
     if (item) {
         speakItem(item.spoken);
     }
-});
+}
 
-actionBtn.addEventListener("click", () => {
+function advance() {
     if (practiceItems.length === 0) return;
+
+    // 连点保护：双指/连击不会一次跳过两条数据
+    const now = Date.now();
+
+    if (now - lastAdvanceAt < NEXT_COOLDOWN_MS) return;
+    lastAdvanceAt = now;
 
     // Match the documented behavior: timing begins with the first click on “Next”.
     if (!timerRunning) {
@@ -606,34 +717,74 @@ actionBtn.addEventListener("click", () => {
 
     if (currentIndex < practiceItems.length - 1) {
         currentIndex += 1;
-        loadItem(currentIndex);
+        loadItem(currentIndex, true);
         return;
     }
 
     finishRound();
+}
+
+speakBtn.addEventListener("click", replayCurrent);
+actionBtn.addEventListener("click", advance);
+
+// 键盘：空格 / R 重听，→ / Enter / N 下一题
+document.addEventListener("keydown", (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (!roundOverlay.hidden) return; // 结算层打开时交给它自己处理
+
+    const tag = event.target && event.target.tagName;
+    if (tag === "BUTTON" || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+    if (event.code === "Space" || event.key === " ") {
+        event.preventDefault();
+        replayCurrent();
+        return;
+    }
+
+    if (event.key === "ArrowRight" || event.key === "Enter"
+        || event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        advance();
+    }
 });
 
 function finishRound() {
     stopTimer();
     stopSpeech();
 
-    const minutes = Math.floor(timerSeconds / 60);
-    const seconds = timerSeconds % 60;
-    const completedCount = practiceItems.length;
+    // 用页内结算层替代 window.alert：alert 会阻塞主线程，
+    // 且确认后立刻重置，用户既看不到成绩也没法重听最后一题。
+    roundCountEl.textContent = String(practiceItems.length);
+    roundTimeEl.textContent = formatDuration(timerSeconds);
+    roundOverlay.hidden = false;
+    document.body.classList.add("is-locked");
 
-    window.alert(
-        `🎉 Congratulations!\n`
-        + `You've completed all ${completedCount} items.\n`
-        + `Time spent: ${minutes}分${seconds}秒`
-    );
+    window.requestAnimationFrame(() => roundRestartBtn.focus());
+}
 
-    // Preserve the original design: immediately prepare a new random round.
-    // The new round timer remains at 00:00 until the first “Next” click.
+function closeRoundOverlay() {
+    roundOverlay.hidden = true;
+    document.body.classList.remove("is-locked");
+
+    // 保持原设计：结算后立即准备新一轮，计时停在 00:00，
+    // 直到用户点第一次“下一个”才开始计时。
     initPractice();
 }
 
+roundRestartBtn.addEventListener("click", closeRoundOverlay);
+
+document.addEventListener("keydown", (event) => {
+    if (roundOverlay.hidden) return;
+
+    if (event.key === "Escape" || event.key === "Enter") {
+        event.preventDefault();
+        closeRoundOverlay();
+    }
+});
+
 // Stop queued speech when the user leaves or reloads the page.
 window.addEventListener("beforeunload", stopSpeech);
+window.addEventListener("pagehide", stopSpeech);
 
 // ==================== START ====================
 if (speechIsSupported()) {
