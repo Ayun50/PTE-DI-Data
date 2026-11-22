@@ -213,6 +213,7 @@ let timerStartedAt = null;
 
 // Speech state
 let rankedVoices = [];              // 按质量从高到低排序的英文语音
+let cachedVoiceList = [];           // 最近一次 getVoices() 的完整列表
 const failedVoiceURIs = new Set();  // 朗读失败过的语音（如离线时的云端语音）
 let speechSessionId = 0;            // 每次朗读的会话 id，用于丢弃过期回调
 let pendingSpeech = null;           // 语音列表尚未加载完成时暂存的朗读请求
@@ -229,8 +230,16 @@ const messageDiv = document.getElementById("message");
 // ==================== SPEECH ENGINE SELECTION ====================
 // 思路：Web Speech API 本身不提供“声音”，它只是调用系统里安装的语音引擎。
 // 不同电脑、不同浏览器拿到的语音列表顺序和质量差异极大，直接取 voices[0]
-// 很可能选中机械的 SAPI / eSpeak 语音。下面按“语言 + 名称关键词”给英文语音打分，
-// 优先使用自然度高的语音（Google、Edge Natural、macOS Enhanced/Siri 等）。
+// 很可能选中机械的 SAPI / eSpeak 语音。
+//
+// 优先级设计（本地优先，避免云端网络延迟）：
+//   1. 本地高质量引擎（localService=true 且未命中低质量关键词）——最高优先
+//   2. 云端高质量引擎（Google / Edge Online Natural）——次选
+//   3. 本地低质量引擎（Desktop / eSpeak / Compact / SAPI）——兜底
+//   4. 趣味 / 老式语音——最低
+//
+// 排序（打分 + sort）只在页面加载和 voiceschanged 时执行；
+// 每次换词只做一次 O(n) filter + find，不做重新排序。
 
 // 自然度较高的语音名称特征
 const HIGH_QUALITY_HINTS = [
@@ -266,6 +275,10 @@ function normalizeLang(lang) {
     return (lang || "").replace(/_/g, "-").toLowerCase();
 }
 
+function hasAnyHint(name, hints) {
+    return hints.some(hint => name.includes(hint));
+}
+
 function scoreVoice(voice) {
     const name = (voice.name || "").toLowerCase();
     const lang = normalizeLang(voice.lang);
@@ -282,14 +295,24 @@ function scoreVoice(voice) {
         score -= 200;
     }
 
-    // 2. 名称关键词
-    if (HIGH_QUALITY_HINTS.some(hint => name.includes(hint))) score += 50;
-    if (LOW_QUALITY_HINTS.some(hint => name.includes(hint))) score -= 60;
-    if (LEGACY_OR_NOVELTY_HINTS.some(hint => name.includes(hint))) score -= 150;
+    const isLowQuality = hasAnyHint(name, LOW_QUALITY_HINTS);
 
-    // 3. 云端语音（localService === false）通常是 Google / Edge Natural 这类
-    //    高质量语音，略微加分；离线失败会由 failedVoiceURIs 自动回退
-    if (voice.localService === false) score += 10;
+    // 2. 本地引擎优先（无网络往返，首字延迟低）
+    //    - 本地 + 非低质量：+40
+    //    - 本地 + 低质量：不额外加分
+    //    - 云端：-30，仍保留为备选
+    if (voice.localService === true) {
+        if (!isLowQuality) {
+            score += 40;
+        }
+    } else {
+        score -= 30;
+    }
+
+    // 3. 名称关键词
+    if (hasAnyHint(name, HIGH_QUALITY_HINTS)) score += 50;
+    if (isLowQuality) score -= 60;
+    if (hasAnyHint(name, LEGACY_OR_NOVELTY_HINTS)) score -= 150;
 
     // 4. 系统默认语音通常不是最好的
     if (voice.default) score -= 5;
@@ -313,6 +336,8 @@ function refreshVoices() {
     const voices = window.speechSynthesis.getVoices();
     if (!voices || voices.length === 0) return; // 尚未加载完成
 
+    // 缓存完整列表，供 resolveCurrentVoice 做失效检测
+    cachedVoiceList = voices;
     rankedVoices = rankEnglishVoices(voices);
     failedVoiceURIs.clear(); // 语音列表变化后，重新给之前失败的语音一次机会
 
@@ -320,7 +345,7 @@ function refreshVoices() {
         console.info(
             "[speech] ranked voices:",
             rankedVoices.map(v =>
-                `${v.name} (${v.lang}${v.localService ? "" : ", cloud"})`
+                `${v.name} (${v.lang}${v.localService ? ", local" : ", cloud"})`
             )
         );
     }
@@ -330,11 +355,12 @@ function getCandidateVoices() {
     return rankedVoices.filter(voice => !failedVoiceURIs.has(voice.voiceURI));
 }
 
-// 缓存的语音对象在部分浏览器上可能失效，speak 前按 voiceURI 重新匹配
+// 在缓存的语音列表里重新匹配，避免直接使用可能失效的旧引用。
+// 不再调用 getVoices()；语音列表变化时由 voiceschanged 刷新缓存。
+// 若引用仍失效，speak 会触发 onerror，failedVoiceURIs 会剔除它并自动换下一个。
 function resolveCurrentVoice(voice) {
     if (!voice) return null;
-    const current = window.speechSynthesis.getVoices() || [];
-    return current.find(v => v.voiceURI === voice.voiceURI) || voice;
+    return cachedVoiceList.find(v => v.voiceURI === voice.voiceURI) || voice;
 }
 
 function handleVoicesChanged() {
